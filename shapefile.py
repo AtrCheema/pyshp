@@ -166,7 +166,7 @@ def signed_area(coords):
     return sum(xs[i]*(ys[i+1]-ys[i-1]) for i in range(1, len(coords)))/2.0
 
 class Shape(object):
-    def __init__(self, shapeType=NULL, points=None, parts=None, partTypes=None):
+    def __init__(self, ShapeFile_Name=None, shapeType=NULL, points=None, parts=None, partTypes=None):
         """Stores the geometry of the different shape types
         specified in the Shapefile spec. Shape types are
         usually point, polyline, or polygons. Every shape type
@@ -183,6 +183,7 @@ class Shape(object):
         self.parts = parts or []
         if partTypes:
             self.partTypes = partTypes
+        self.ShapeFile_Name = ShapeFile_Name
 
     @property
     def __geo_interface__(self):
@@ -225,7 +226,8 @@ class Shape(object):
             if len(self.parts) == 1:
                 return {
                 'type': 'Polygon',
-                'coordinates': (tuple([tuple(p) for p in self.points]),)
+                'coordinates': (tuple([tuple(p) for p in self.points]),),
+                    'ShapeFile_Name': self.ShapeFile_Name
                 }
             else:
                 ps = None
@@ -251,12 +253,14 @@ class Shape(object):
                 if len(polys) == 1:
                     return {
                     'type': 'Polygon',
-                    'coordinates': tuple(polys[0])
+                    'coordinates': tuple(polys[0]),
+                    'ShapeFile_Name': self.ShapeFile_Name
                     }
                 elif len(polys) > 1:
                     return {
                     'type': 'MultiPolygon',
-                    'coordinates': polys
+                    'coordinates': polys,
+                    'ShapeFile_Name': self.ShapeFile_Name
                     }
         else:
             raise Exception('Shape type "%s" cannot be represented as GeoJSON.' % SHAPETYPE_LOOKUP[self.shapeType])
@@ -622,10 +626,12 @@ class Reader(object):
         for feat in self.iterShapeRecords():
             fdict = {'type': 'Feature',
                      'properties': dict(zip(fieldnames,feat.record)),
-                     'geometry': feat.shape.__geo_interface__}
+                     'geometry': feat.shape.__geo_interface__,
+                     'file_name': self.ShapeFile_Name}
             features.append(fdict)
         return {'type': 'FeatureCollection',
                 'bbox': self.bbox,
+                'file_name': self.ShapeFile_Name,
                 'features': features}
 
     @property
@@ -636,6 +642,7 @@ class Reader(object):
         """Opens a shapefile from a filename or file-like
         object. Normally this method would be called by the
         constructor with the file name as an argument."""
+        setattr(self, 'ShapeFile_Name', shapefile)
         if shapefile:
             (shapeName, ext) = os.path.splitext(shapefile)
             self.shapeName = shapeName
@@ -747,7 +754,7 @@ class Reader(object):
     def __shape(self):
         """Returns the header info and geometry for a single shape."""
         f = self.__getFileObj(self.shp)
-        record = Shape()
+        record = Shape(self.ShapeFile_Name)
         nParts = nPoints = zmin = zmax = mmin = mmax = None
         (recNum, recLength) = unpack(">2i", f.read(8))
         # Determine the start of the next record
